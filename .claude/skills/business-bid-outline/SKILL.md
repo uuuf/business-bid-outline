@@ -1,6 +1,6 @@
 ---
 name: business-bid-outline
-description: 当用户要求根据招标文件生成商务标目录、商务标大纲或商务响应目录时使用。以资深标书专家角色分析招标文件，最终只输出 outline.json。
+description: 当用户要求根据招标文件生成商务标目录、商务标大纲、商务响应目录、投标文件目录结构或 outline.json 时使用。以资深标书专家角色分析招标文件，最终只输出 outline.json。
 ---
 
 # Business Bid Outline
@@ -19,6 +19,9 @@ description: 当用户要求根据招标文件生成商务标目录、商务标�
 
 V1 只做目录结构判断，最终只输出一个 `outline.json`。
 
+**执行前准备：**
+用户需在执行本 skill 前编辑 `user_confirmed_inputs.json`，填入响应标段、投标人类型等关键上下文（具体字段见该文件注释）。AI 将直接读取，不再逐一询问。
+
 禁止：
 
 - 生成商务标正文
@@ -32,63 +35,46 @@ V1 只做目录结构判断，最终只输出一个 `outline.json`。
 
 - 先理解全文，再生成目录。
 - 顶层目录必须忠实于招标文件中成稿格式章节的目录块，不按通用经验重排。
-- 不写死“第六章”“目 录”“附件”等精确字符串作为全局规则。
 - 每个进入 `sections` 的目录项都必须有可追溯的招标文件原文 `source_text`。
-- 不确定的问题进入 `review_items`，不要编造成确定目录项。
+- `review_items` 只记录完成目录判断后仍影响目录项存在、归属或状态的人工审核问题。
 - `required_status` 只表达该目录项在当前目录中的提交状态，只能为“必要”“可选”“待确认”。
 
 ## 执行步骤
 
 ### 1. 建立内部 tender_map，形成全文理解
 
-本步骤只做全文理解和事实建图，不生成 `sections`，不定位主目录来源，不匹配补充资料，不单独输出文件。
+如果 `scripts/prepare_tender_map_inputs.py` 可用，应优先用它把招标文件整理为 `tender_map_inputs.json`：
 
-结合两类能力：
+```bash
+python scripts/prepare_tender_map_inputs.py <招标文件.docx> --expert-checklist references/expert-checklist.md --output tender_map_inputs.json
+```
 
-1. 专家经验清单：人工预设的重点关注规则，可后续补充。
-2. AI 自主识别：根据当前招标文件的卷、章、节、表格、附件、格式内容，自主发现项目专属的重要要求。
+该脚本只提供原文块、表格结构、重点区域切片和专家清单命中候选，不替代 AI 的 `tender_map` 和目录判断。
+
+本步骤只做全文理解和事实建图，不生成 `sections`，不定位主目录来源，不匹配补充资料，不单独输出最终交付文件。
+
+结合 `references/expert-checklist.md` 的专家经验清单和 AI 对当前招标文件卷、章、节、表格、附件、格式内容的自主识别，形成内部 `tender_map`。
 
 `tender_map` 应在内部包含：
 
 - `document_structure`：招标文件主要卷、章、节、重要附表、重要附件、格式文件位置。
 - `context_variables`：会影响目录展开或后续正文生成的项目上下文，如项目名称、标段、招标范围、报价范围、投标有效期、保证金、联合体、资格/业绩适用对象等。
-- `user_confirmed_inputs`：如果某个信息会直接影响目录展开，且招标文件无法替用户决定，应先询问用户，确认后记录在这里。例如响应标段、是否联合体投标、是否提交备选方案。
+- `user_confirmed_inputs`：在执行本 skill 前，用户应编辑 `user_confirmed_inputs.json` 确认关键上下文（如响应标段、投标人类型、是否联合体、是否提交备选方案等），AI 将直接读取该文件而非询问用户。若某信息招标文件无法替用户决定且 JSON 中未填，则写入 `review_items`。
 - `expert_checklist_hits`：专家经验清单在当前招标文件中的命中内容，保留关键原文和重要性判断。
 - `ai_discovered_findings`：AI 自主发现的项目专属重要要求，如特殊承诺、特殊证明材料、特殊报价说明、特殊商务响应要求、隐藏在表格中的提交要求。
 
 第 1 步不要把所有发现写入 `review_items`。只有后续步骤完成目录判断后仍无法确定的问题，才进入最终 `outline.json.review_items`。
 
-#### 初始专家经验清单
+#### 专家清单与参考样例
 
-1. 投标人须知前附表
-   - 通常包含投标文件组成、保证金、投标有效期、签字盖章、递交要求、实质性响应要求。
-   - 可能影响 `context`，也可能影响投标函、保证金、资格证明、商务偏差等章节。
-2. 符合性审查标准表
-   - 通常包含废标项或实质性响应要求。
-   - 必须识别其中要求提交、签署、盖章、承诺、响应、报价唯一性、保证金等内容。
-3. 资格审查要求
-   - 决定投标人是否具备投标资格。
-   - 重点关注资质、财务、业绩、信誉、信用记录、制造商能力等证明材料。
-4. 商务评分标准表
-   - 影响商务得分，可能要求额外证明材料。
-   - 重点关注业绩、企业实力、服务能力、资信、认证、奖项等加分证明。
-5. 否决投标条款 / 实质性要求
-   - 直接影响是否废标。
-   - 重点关注必须响应、不得偏离、必须承诺、必须提交证明的内容。
+- `references/expert-checklist.md` 是可持续补充的专家经验清单，用于指导重点区域识别，不是硬编码目录规则。
+- `references/outline.example.json` 是 `outline.json` 输出格式样例，可用于理解 schema，但不要照抄示例内容。
 
 ### 2. 定位主目录来源
 
 在完成整体理解后，寻找招标文件中用于规定投标文件最终成稿格式的章节。
 
-该章节可能叫：
-
-- 投标文件格式
-- 响应文件格式
-- 投标响应文件格式
-- 投标文件组成及格式
-- 投标文件编制格式
-
-这些名称只是语义线索，不是硬编码规则。应根据上下文判断该章节是否用于规定最终投标/响应文件成稿格式。
+该章节可能叫“投标文件格式”“响应文件格式”“投标响应文件格式”“投标文件组成及格式”“投标文件编制格式”等。这些名称只是语义线索，不是硬编码规则；应根据上下文判断该章节是否用于规定最终投标/响应文件成稿格式。
 
 在该章节中，由上下文判断“封面格式之后、具体格式正文之前”的目录块：
 
@@ -105,43 +91,78 @@ V1 只做目录结构判断，最终只输出一个 `outline.json`。
 
 - 顶层 `sections` 的顺序、标题和覆盖范围忠实于招标文件中的目录块。
 - 不按通用经验重排。
-- `title` 为去掉原始编号后的标题。
-- 原始编号保留在 `source_text` 中。
-
-示例：
-
-如果目录原文中有：
-
-`附件1 投标函、法定代表人身份证明、法定代表人授权书、投标人廉洁自律承诺书`
-
-则生成一个顶层 section：
-
-```json
-{
-  "id": "sec-001",
-  "title": "投标函、法定代表人身份证明、法定代表人授权书、投标人廉洁自律承诺书",
-  "level": 1,
-  "required_status": "必要",
-  "source_text": "附件1 投标函、法定代表人身份证明、法定代表人授权书、投标人廉洁自律承诺书",
-  "children": []
-}
-```
+- 先确定目录项在招标文件中的原文边界，再生成字段。
+- `source_text` 必须逐字复制该目录项在招标文件中的原文，包括编号、括号、空格、换行和标点；不得重组、改写、补全或调整编号位置。例如原文为“投标函的格式(1A)”，`source_text` 也必须是“投标函的格式(1A)”，不能改成“投标函的格式 1A”。
+- `title` 是从 `source_text` 提取出的目录标题，可去掉明确的目录序号或附件号；如果编号是否属于标题无法确定，保留在 `title` 中，不要为了美化而改写 `source_text`。
 
 ### 4. 展开组合型目录项
 
-如果某个顶层目录项包含多个文件，或后文存在更细格式编号，需要继续在对应正文格式中识别子项。
+如果某个顶层目录项包含多个文件，或对应正文格式内存在更细材料单位，必须先确定该父目录项的完整正文范围，再判断是否展开 `children`。
 
-例如顶层 `附件1` 对应后文可能有：
+优先使用 `scripts/extract_format_children_candidates.py` 在父章节完整正文范围内抽取 children 候选：
 
-- `1A 投标函格式`
-- `1B 法定代表人身份证明`
-- `1C 投标人法定代表人授权委托书格式`
+```bash
+python scripts/extract_format_children_candidates.py tender_map_inputs.json \
+  --parent-source-text "附件7A 商务部分摘要表" \
+  --next-sibling-source-text "附件7B" \
+  --output children_candidates.json
+```
 
-则在该顶层 section 的 `children` 下生成子 section。
+也可在更可靠时使用 `--parent-title`、`--parent-section-id`、`--start-block-id`、`--end-before-block-id`。脚本只读取 `tender_map_inputs.json`，只输出候选，不直接生成 `outline.json`，不决定最终 children。
+
+父章节范围原则：
+
+- 从父级目录项对应正文标题开始。
+- 到下一个同级目录项对应正文标题之前结束。
+- 不得只依据当前上下文窗口。
+- 不得因为输出窗口限制提前停止。
+- 如果脚本输出 `warnings`，必须结合 `body_scope.block_ids`、`body_scope.text` 和上下文复核边界；不能跨入明显无关章节。
+
+候选类型包括：
+
+- `explicit_numbered_heading`：显性编号标题，如 `A`/`B`/`C`、`1A`/`1B`、`D-1`、`1.1`、`一、`、`（一）`、`(1)`、`附件7A` 等。
+- `style_heading`：无明显编号但像材料标题的短段落，如承诺书、报价函、摘要表、财务状况表等。
+- `table_title`：表格标题或表号，如 `7A表`、`7D-1表`、`表2 B`、`表1 A-1` 等。
+- `table_attached_material`：表格内后附、应附、须提供、提交、提供复印件/扫描件/证明材料/证书/截图/合同/报告等隐性材料要求。
+- `paragraph_attached_material`：正文中的提交材料要求。
+
+AI 不应只根据 `anchor_type` 决定是否进入 `children`。必须结合：
+
+- 父章节完整范围。
+- 候选 `source_text`。
+- `block_id` / `table_id` / `row_index` / `col_index`。
+- `row_text`。
+- `heading_path`。
+- 前后文。
+- 顶层目录项语义。
+- 是否可单独编排、可单独审查。
+
+进入 `children` 的条件：
+
+- 位于父章节完整范围内。
+- 是投标人需要单独填写、提交、后附或证明的材料单位。
+- 可单独编排、可单独审查。
+- 没有被现有 children 明确覆盖。
+- 有逐字 `source_text`。
+
+不进入 `children` 的情况：
+
+- 只是评分规则。
+- 只是签字盖章要求。
+- 只是报价唯一性、不得偏离等规则性条款。
+- 只是说明文字或填写提示。
+- 已被更上层或更明确的 children 覆盖。
+
+如果 AI 在父章节完整范围中发现脚本漏掉的明显材料单位，也可以补充为 children，但必须满足：
+
+- 有逐字 `source_text`。
+- 位于父章节范围内。
+- 能说明它是可单独编排、可单独审查的材料。
+- 不得凭经验编造。
 
 处理多标段、多报价表、多货物规格表等情况时：
 
-- 可依据 `tender_map` 和 `user_confirmed_inputs` 生成或标记相应 children。
+- 可依据 `tender_map`、`children_candidates.json` 和 `user_confirmed_inputs.json` 中的配置生成或标记相应 children。
 - 不要编造招标文件中不存在的具体内容。
 - 不能确定时，相关 section 的 `required_status` 标为“待确认”，并视情况写入 `review_items`。
 
@@ -151,21 +172,10 @@ V1 只做目录结构判断，最终只输出一个 `outline.json`。
 
 对 `tender_map` 中每条重要线索，按以下顺序处理：
 
-1. 判断是否属于目录材料
-   - 判断该要求是否对应投标人需要单独提交的材料单位，例如一份文件、一张表、一项承诺/声明、一组证明文件。
-   - 只有可单独编排、可单独审查的材料单位，才可能新增为 `children`。
-   - 不要把审查标准、评分规则、签字盖章要求、报价唯一性要求、响应原则等规则性条款直接拆成目录项。
-2. 必要时复核原文
-   - 如果 `tender_map` 摘要不足以判断该要求是否应成为目录项、是否必须提交、或应归入哪里，应回到招标文件原文上下文复核。
-   - 补充 `children` 或写入 `review_items` 时，`source_text` 必须使用招标文件原文。
-3. 检查是否已覆盖
-   - 如果该材料已被现有 `sections` 或 `children` 明确覆盖，不重复新增。
-   - 如果只被顶层 section 宽泛覆盖，但没有明确子项，且该材料影响废标、资格审查、符合性审查或商务评分，可以补充为 `children`。
-4. 处理结果
-   - 能明确归入已有顶层 section：新增为该 section 的 `children`。
-   - 只是影响目录展开或后续正文生成，不是目录项：摘要写入 `outline.json.context`。
-   - 是否应作为目录项不确定，或归属章节不确定：写入 `review_items`，并尽量填写 `suggested_section_id`。
-   - 已进入 `sections` 但是否保留、是否适用或是否独立列出仍不确定：该 section 的 `required_status` 标为“待确认”；需要说明审核点时，同时写入 `review_items`。
+1. 判断它是否对应需要单独提交、可单独编排和审查的材料单位，例如文件、表格、承诺/声明、证明文件组；不要把审查标准、评分规则、签章要求、报价唯一性要求、响应原则等规则性条款直接拆成目录项。
+2. 如果摘要不足以判断，应优先用 `scripts/get_context_block.py` 从 `tender_map_inputs.json` 获取上下文块；复核和输出 `source_text` 时必须使用招标文件原文。
+3. 如果该材料已被现有 `sections`/`children` 明确覆盖，不重复新增；若只被顶层 section 宽泛覆盖，且影响废标、资格审查、符合性审查或商务评分，可以补充为 `children`。
+4. 能明确归入已有顶层 section 的，新增为该 section 的 `children`；只是影响目录展开或后续正文生成的，摘要写入 `context`；是否应作为目录项或归属章节不确定的，写入 `review_items` 并尽量填写 `suggested_section_id`。
 
 判断归属时，不要只按关键词匹配。应结合来源位置和证明目的判断它是固定格式文件、证明材料、资格门槛、评分加分项、废标风险检查点、报价文件内容，还是商务响应内容。
 
@@ -177,13 +187,15 @@ V1 只做目录结构判断，最终只输出一个 `outline.json`。
 
 ### 6. 输出 outline.json
 
-最终只输出一个 JSON 对象，即 `outline.json` 。不要在 JSON 前后添加解释、Markdown 代码块、目录说明或正文内容。
+如果用户要求创建文件或提供了输出目录，则写入名为 `outline.json` 的文件；否则只返回 `outline.json` 的 JSON 内容。
+
+无论写入文件还是直接返回，内容都必须是一个 JSON 对象，不要添加解释、Markdown 代码块、目录说明或正文内容。
 
 `review_items` 是 `outline.json` 的一部分，只记录最终仍需要人工确认的目录判断问题。
 
 ## outline.json schema
 
-顶层结构：
+参考完整样例见 `references/outline.example.json`。顶层结构：
 
 ```json
 {
@@ -208,19 +220,6 @@ V1 只做目录结构判断，最终只输出一个 `outline.json`。
 - `sections`：最终目录树，数组顺序就是商务标目录顺序。
 - `review_items`：只记录目录生成完成后仍需人工审核的目录判断问题。
 
-每个 section 必须包含：
-
-```json
-{
-  "id": "sec-001",
-  "title": "投标函、法定代表人身份证明、法定代表人授权书、投标人廉洁自律承诺书",
-  "level": 1,
-  "required_status": "必要",
-  "source_text": "附件1 投标函、法定代表人（单位负责人）身份证明、法定代表人授权书、投标人廉洁自律承诺书",
-  "children": []
-}
-```
-
 section 字段规则：
 
 - `id`：稳定目录项 ID，建议 `sec-001`、`sec-001-001`。
@@ -230,19 +229,8 @@ section 字段规则：
   - “必要”：招标文件明确要求提交，或投标文件格式目录明确列出。
   - “可选”：仅在特定条件下提交，例如联合体、代理商、备选方案等情形。
   - “待确认”：该目录项已有依据进入目录树，但是否适用、是否保留或是否独立列出仍需人工判断。
-- `source_text`：该目录项对应的招标文件原文。
+- `source_text`：该目录项对应的招标文件逐字原文证据，不得重组、改写、补全或调整编号位置。
 - `children`：子目录项数组，没有则为空数组。
-
-review_items 结构：
-
-```json
-{
-  "message": "该补充资料要求需要人工确认是否应放入建议章节。",
-  "source_text": "招标文件相关原文",
-  "suggested_section_id": "sec-007",
-  "required_status": "待确认"
-}
-```
 
 review_items 字段规则：
 
@@ -253,7 +241,19 @@ review_items 字段规则：
 
 ## 输出要求
 
-最终交付为 `outline.json` 文件。
+如果用户要求创建文件或提供了输出目录，最终交付为 `outline.json` 文件；否则最终响应只输出 `outline.json` 的 JSON 内容。
+
+生成 `outline.json` 后，建议运行 schema 校验：
+
+```bash
+python scripts/validate_outline.py outline.json
+```
+
+如果已有 `tender_map_inputs.json`，建议继续检查 `source_text` 是否可追溯：
+
+```bash
+python scripts/check_source_text.py outline.json tender_map_inputs.json
+```
 
 不要输出：
 
@@ -263,22 +263,6 @@ review_items 字段规则：
 - Markdown 目录
 - 额外文件清单
 - 内部 `tender_map`
-
-## 验收标准
-
-生成结果必须满足：
-
-- 能由 AI 判断“投标文件格式”或同类成稿格式章节。
-- 能识别该章节中封面之后、具体格式正文之前的目录块。
-- 能根据目录块生成顶层 `sections`。
-- 能展开组合型目录项下的 `children`。
-- 每个 section 都有 `source_text`，且能对应到招标文件中的原文，可用于人工高亮审核。
-- `context` 只保留对目录展开或后续正文生成有影响的信息。
-- `required_status` 只表达目录项提交状态。
-- `review_items` 只记录目录生成中的人工审核问题。
-- `review_items.suggested_section_id` 尽量指向已有 section id。
-- 没有写死“第六章”“目 录”“附件”作为全局规则。
-- 没有生成 `outline.json` 以外的交付文件。
 
 ## 质量检查清单
 
@@ -293,4 +277,5 @@ review_items 字段规则：
 7. 规则性条款是否避免被直接拆成目录项？
 8. 每个 section 是否都有 `source_text`？
 9. `required_status` 是否只使用“必要”“可选”“待确认”？
-10. 最终响应是否只有 JSON，没有 Markdown 包裹或解释文字？
+10. 是否已用 `scripts/validate_outline.py` 校验 schema？
+11. 如果已有 `tender_map_inputs.json`，是否已用 `scripts/check_source_text.py` 检查 `source_text` 可追溯？
