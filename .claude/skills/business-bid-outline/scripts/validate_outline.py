@@ -14,6 +14,13 @@ REQUIRED_SECTION = ["id", "title", "level", "required_status", "source_text", "c
 REQUIRED_REVIEW_ITEM = ["message", "source_text", "suggested_section_id", "required_status"]
 VALID_REQUIRED_STATUS = {"必要", "可选", "待确认"}
 VALID_CONFIDENCE = {"high", "medium", "low"}
+VALID_OUTLINE_SOURCE_TYPE = {
+    "history_bid_toc",
+    "history_bid_headings",
+    "history_bid_unknown",
+    "tender_matched",
+    "tender_format_toc",
+}
 
 
 def type_name(value):
@@ -43,6 +50,12 @@ def validate_outline_source(value, errors):
     for key in ["section_title", "source_text"]:
         if key in value and not isinstance(value[key], str):
             errors.append(f"outline_source.{key}: expected string")
+    source_type = value.get("source_type")
+    if source_type is not None and source_type not in VALID_OUTLINE_SOURCE_TYPE:
+        errors.append("outline_source.source_type: unsupported value")
+    history_document_name = value.get("history_document_name")
+    if history_document_name is not None and not isinstance(history_document_name, str):
+        errors.append("outline_source.history_document_name: expected string")
 
 
 def validate_section(section, path, errors, section_ids):
