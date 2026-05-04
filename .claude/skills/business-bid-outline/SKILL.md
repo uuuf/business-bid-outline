@@ -69,12 +69,22 @@ V1 只做目录结构判断，最终只输出一个 `outline.json`。
 python scripts/prepare_history_bid_outline_inputs.py <历史商务标投标文件.docx> --output history_bid_outline_inputs.json
 ```
 
+历史商务标投标文件目录识别优先级必须是：
+
+1. Word 自动目录控件。自动目录通常是可点击“更新目录”的 Table of Contents 控件，DOCX 内部可能包含 `w:sdt`、`docPartGallery="Table of Contents"`、`TOC`、`HYPERLINK`、`PAGEREF`、`_Toc` bookmark 等字段。
+2. 普通目录页。必须有明确“目录”或“目 录”标题，且后续连续多行具备目录项特征。
+3. 正文明确标题结构。只有没有自动目录、没有普通目录页时，才使用正文中的 `Heading1-6`、`标题1-6` 或 `w:outlineLvl`。
+
+如果能解析 Word 自动目录，只读取目录控件内部内容，不要再从正文编号推断目录。没有自动目录时，才尝试普通目录页；普通目录页只读取“目录”标题后的连续目录块，遇到第一个正文标题或明显正文段落后停止。没有目录页时，才使用正文中的明确标题结构。
+
+禁止仅凭正文编号模式识别目录或标题：`1.1`、`7.9.2`、`一、`、`（一）`、`附件1` 等文本编号只能在已经确认处于目录页内部时辅助判断 level，不能在正文全文中把普通段落升级为目录候选。
+
 该脚本负责读取历史商务标 DOCX，输出：
 
 - `document_name`：历史文件名。
 - `blocks`：历史文件原文块。
 - `outline_source`：历史目录或标题结构来源，可能包含 `source_type` 和 `history_document_name`。
-- `outline_candidates`：候选目录项、层级、历史原文证据。
+- `outline_candidates`：候选目录项、层级、历史原文证据；自动目录候选可能包含 `bookmark_name` 或 `matched_body_block_id` 用于追溯。
 
 脚本只提供候选和历史原文 fallback 证据，不直接生成 `outline.json`，不替代 AI 判断，不把历史原文默认当作最终 `source_text`。
 
@@ -209,7 +219,7 @@ python scripts/extract_format_children_candidates.py tender_map_inputs.json \
   - `section_title`：AI 判断出的目录结构来源说明，通常为历史商务标目录或历史商务标标题结构。
   - `source_text`：用于学习顶层目录结构的历史商务标目录块或标题结构原文。
   - `confidence`：只能是 `high` / `medium` / `low`。
-  - `source_type`：可选，建议使用 `history_bid_toc`、`history_bid_headings`、`history_bid_unknown`、`tender_matched`、`tender_format_toc`。
+  - `source_type`：可选，建议使用 `history_bid_auto_toc`、`history_bid_toc`、`history_bid_headings`、`history_bid_unknown`、`tender_matched`、`tender_format_toc`。
   - `history_document_name`：可选，历史商务标投标文件名；当目录结构来自历史文件时建议填写。
 - `context`：只记录对目录展开或后续正文生成有明显影响的关键上下文，key 使用英文 snake_case，每项尽量包含 `value` 或 `summary` 以及 `source_text`。
 - `sections`：最终目录树，数组顺序就是商务标目录顺序。

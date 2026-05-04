@@ -15,6 +15,7 @@ REQUIRED_REVIEW_ITEM = ["message", "source_text", "suggested_section_id", "requi
 VALID_REQUIRED_STATUS = {"必要", "可选", "待确认"}
 VALID_CONFIDENCE = {"high", "medium", "low"}
 VALID_OUTLINE_SOURCE_TYPE = {
+    "history_bid_auto_toc",
     "history_bid_toc",
     "history_bid_headings",
     "history_bid_unknown",
