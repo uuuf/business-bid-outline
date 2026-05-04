@@ -35,10 +35,15 @@ V1 只做目录结构判断，最终只输出一个 `outline.json`。
 
 ## 工作原则
 
-- 历史商务标投标文件是目录结构学习来源：用于学习顶层顺序、层级关系、常见章节名称、children 归属和哪些材料通常单独编排。
+- 历史商务标投标文件是历史经验的结晶，是目录结构的优先继承对象：顶层、children、grandchildren 都要学习并尽量保留，用于保留顺序、层级关系、常见章节名称、children / grandchildren 归属和哪些材料通常单独编排。
+- 历史 child / grandchild 默认应保留；只有存在强证据表明该项不适合目录阶段保留时，才允许删除、延后或合并。
+- 不得仅因为当前招标文件没有逐字对应 `source_text`、只有宽泛条款覆盖、多个历史子项同属一类要求、标题可被概括表达或为了让目录更短更整齐，就删除或合并历史 section、child 或 grandchild。
+- 当前招标文件 `source_text` 匹配失败，只影响 `source_text` 的选择和 `required_status` 判断，不构成删除历史子项的理由。
+- 只有能明确判断为“素材库组装项”、明显不适用于当前项目且有当前招标文件或用户确认依据、或已被另一个更明确历史目录项完整覆盖的历史子层级，才在目录生成阶段延后、不保留或合并。
+- 无法判断某个历史子层级是否应删除时，优先按“历史经验项”保留，并用 `required_status`、`context` 或 `review_items` 标明当前招标文件证据不足。
 - 当前招标文件是当前项目要求的权威来源，也是 `source_text` 的优先来源。
-- 从历史目录学习来的每个 section 或 child，都必须尽量回到当前招标文件中寻找对应原文。
-- 只有当前招标文件中找不到可靠对应原文时，才允许使用历史投标文件原文作为 `source_text` fallback。
+- 从历史目录学习来的每个 section、child 或 grandchild，都必须尽量回到当前招标文件中寻找对应原文。
+- 找不到当前招标文件明确原文不代表删除；历史经验项可使用历史投标文件原文作为 `source_text` fallback。
 - 当前项目补强项的 `source_text` 必须来自当前招标文件，不能来自历史投标文件。
 - 顶层 `sections` 原则上保持历史商务标目录结构，不为匹配当前招标文件不稳定目录块而重排。
 - `review_items` 只记录完成目录判断后仍影响目录项存在、归属或状态的人工审核问题。
@@ -48,7 +53,8 @@ V1 只做目录结构判断，最终只输出一个 `outline.json`。
 
 1. 当前招标文件明确对应原文：投标文件格式、提交要求、材料名称、表格名称、承诺要求、资格/符合性/评分/前附表/特殊条款等。
 2. 当前招标文件宽泛对应原文：能证明目录项必要性但与历史目录名称不完全一致；此时将 `required_status` 设为“待确认”或写入 `review_items`。
-3. 历史投标文件原文 fallback：仅在当前招标文件找不到可靠对应原文时使用，并在 `outline_source`、`context` 或 `review_items` 中说明来源，避免误认为来自当前招标文件。
+3. 历史投标文件原文 fallback：历史经验项在当前招标文件找不到明确原文时可使用，并在 `outline_source`、`context` 或 `review_items` 中说明“历史经验保留项”，避免误认为来自当前招标文件。
+4. 素材库组装项：不进入目录输出，不为了提供 `source_text` 而固定为 section 或 child；可在 `context` 中说明目录阶段不展开。
 
 ## 执行步骤
 
@@ -92,6 +98,10 @@ python scripts/prepare_history_bid_outline_inputs.py <历史商务标投标文�
 
 基于 `history_bid_outline_inputs.json` 和 AI 对历史文件的理解，生成内部目录结构草案。
 
+一句话原则：历史商务标目录是优先继承对象；不确定时保留，不删除。
+
+先完整保留 `history_bid_outline_inputs.json` 中的层级关系，形成包含顶层、children、grandchildren 的内部草案；不要只学习顶层，不要把历史商务标的多级结构压平。
+
 重点学习：
 
 - 顶层 sections 顺序。
@@ -99,6 +109,8 @@ python scripts/prepare_history_bid_outline_inputs.py <历史商务标投标文�
 - 常见章节名称。
 - children 归属。
 - 哪些材料通常应单独编排。
+
+对每个历史子层级和孙层级做保留判断：历史目录项应先进入内部草案，再经过判别；删除、延后或合并历史子层级必须有强证据。
 
 不要为了匹配当前招标文件中的“投标文件格式”“响应文件格式”等不稳定目录块而重排历史目录结构。
 
@@ -133,13 +145,13 @@ python scripts/prepare_tender_map_inputs.py <招标文件.docx> --expert-checkli
 
 ### 4. 为历史目录草案匹配当前招标文件 source_text
 
-对每个从历史目录学习来的 section 或 child：
+对每个从历史目录学习来的 section、child 或 grandchild：
 
 1. 先在当前招标文件 `tender_map` 中查找对应原文。
 2. 优先匹配投标文件格式章节、投标文件组成、资格/符合性审查、评分标准、前附表、特殊条款、表格标题、材料提交要求等位置。
 3. 若找到明确对应原文，使用当前招标文件原文作为 `source_text`。
 4. 若只能找到宽泛对应原文，使用该宽泛原文作为 `source_text`，并将该项 `required_status` 设为“待确认”或在 `review_items` 中提示人工确认。
-5. 若完全找不到可靠对应原文，才使用历史投标文件原文作为 `source_text`，并在 `context` 或 `review_items` 中说明该项来源于历史投标文件，当前招标文件未找到明确对应要求。
+5. 若完全找不到可靠对应原文，不删除该历史目录项；后续按“历史子层级保留规则”决定保留、延后或不输出。
 
 复核上下文时优先使用：
 
@@ -149,9 +161,44 @@ python scripts/get_context_block.py tender_map_inputs.json --text <关键词或�
 
 `source_text` 必须逐字复制来源原文，不得重组、改写、补全或调整编号位置。`title` 可以参考历史目录名称并做必要清理，但不得把无法证明的内容写成当前招标文件原文。
 
-### 5. 用当前招标文件补强历史目录
+### 5. 历史子层级保留规则
+
+对内部草案中的每个历史 child 或 grandchild，先按历史父子关系和同级关系完整放入草案，再逐项判断。不要先合并、压缩或重命名历史同级目录项。
+
+执行顺序固定为：
+
+1. 先继承历史目录子层级。
+2. 再尝试用当前招标文件匹配 `source_text`。
+3. 匹配不到明确原文时，可以使用历史投标文件 `source_text` fallback。
+4. 只有存在强证据时，才删除、延后或合并历史子项。
+
+历史商务标中的 child / grandchild 默认应保留。只有以下强证据存在时，才允许不继承：
+
+- 该项明显是后续正文组装时由素材库展开的细碎内容，例如具体项目清单、具体证书扫描件、具体协议附件、图片说明、表格行项目、设备/工厂/人员/业绩明细、逐页附件等。
+- 该项明显不适用于当前项目，且有当前招标文件或用户确认作为依据。
+- 该项已被历史目录中另一个更明确的目录项完整覆盖。
+
+不得因为以下原因删除或合并历史子项：
+
+- 当前招标文件没有逐字对应 `source_text`。
+- 当前招标文件只有宽泛条款覆盖。
+- 多个历史子项属于同一类资格、信用、承诺、声明、否决或合规要求。
+- 模型认为可以用一个概括标题表达。
+- 为了让目录更短、更整齐。
+
+当前招标文件 `source_text` 匹配失败，只影响 `source_text` 的选择和 `required_status` 判断，不构成删除历史子项的理由。如果没有强证据，保留历史子项。
+
+对于名称较泛的父章节，例如“投标人需要说明的其他内容”“其他材料”“其他说明”“其他承诺”“其他响应”“资格/信用/符合性相关说明”“资格证明文件”“商务响应材料”等，不要因为父章节名称泛化就压缩其 children。这类章节下的历史子项往往是商务标经验沉淀出来的独立承诺、声明、资格状态、信用状态、合规状态、实质性响应或否决情形响应；只要它们可单独编排、可单独审查，就应直接继承为独立 children。
+
+招标文件中的资格、信用、否决、合规要求本身通常是规则性条款，不一定直接拆成目录。但如果历史商务标已经把这些要求响应成独立承诺、声明或说明类目录项，这些历史目录项应作为历史经验继承，不能因为它们对应的是规则性要求就删除或合并。
+
+一句话原则：历史商务标目录是优先继承对象；不确定时保留，不删除。
+
+### 6. 用当前招标文件补强历史目录
 
 如果当前招标文件中的要求已经被历史目录明确覆盖，不重复新增。
+
+当前招标文件用于匹配 `source_text`、发现新增必须提交材料、补强特殊要求；当前招标文件不是历史 children 保留的唯一门槛。
 
 如果当前招标文件中的要求只是规则性条款，例如签字盖章、报价唯一、不得偏离、评分规则等，不要直接拆成目录项。
 
@@ -159,18 +206,18 @@ python scripts/get_context_block.py tender_map_inputs.json --text <关键词或�
 
 优先把补强项放入已有历史顶层 section 的 `children`。原则上不要新增顶层 section；若当前招标文件明确要求提交但历史顶层目录完全无法承载，应写入 `review_items`，不要擅自新增顶层 section。
 
-展开组合型目录项或补强 children 时，可继续使用：
+展开组合型目录项或补强 children 时，可以使用 `extract_format_children_candidates.py`。使用时必须把参数替换为当前招标文件中真实存在的父章节和下一个同级章节。
 
 ```bash
 python scripts/extract_format_children_candidates.py tender_map_inputs.json \
-  --parent-source-text "附件7A 商务部分摘要表" \
-  --next-sibling-source-text "附件7B" \
+  --parent-source-text "<当前招标文件中真实存在的父章节原文>" \
+  --next-sibling-source-text "<当前招标文件中真实存在的下一个同级章节原文>" \
   --output children_candidates.json
 ```
 
-也可在更可靠时使用 `--parent-title`、`--parent-section-id`、`--start-block-id`、`--end-before-block-id`。脚本只读取 `tender_map_inputs.json`，只输出候选，不直接生成 `outline.json`，不决定最终 children。
+如果无法确定下一个同级章节，应先用 `get_context_block.py` 或 `tender_map_inputs.json` 复核上下文，不要凭经验猜测。也可在更可靠时使用 `--parent-title`、`--parent-section-id`、`--start-block-id`、`--end-before-block-id`。脚本只读取 `tender_map_inputs.json`，只输出候选，不直接生成 `outline.json`，不决定最终 children。`extract_format_children_candidates.py` 用于发现当前招标文件新增 children，不用于覆盖或删除历史 children。
 
-进入 `children` 的条件：
+当前招标文件新增项进入 `children` 的条件：
 
 - 位于可靠的当前招标文件原文范围内。
 - 是投标人需要单独填写、提交、后附或证明的材料单位。
@@ -188,7 +235,7 @@ python scripts/extract_format_children_candidates.py tender_map_inputs.json \
 
 处理多标段、多报价表、多货物规格表等情况时，可依据 `tender_map`、`children_candidates.json` 和 `user_confirmed_inputs.json` 生成或标记相应 children；不能确定时，相关 section 的 `required_status` 标为“待确认”，并视情况写入 `review_items`。
 
-### 6. 输出 outline.json
+### 7. 输出 outline.json
 
 如果用户要求创建文件或提供了输出目录，则写入名为 `outline.json` 的文件；否则只返回 `outline.json` 的 JSON 内容。
 
@@ -229,7 +276,7 @@ section 字段规则：
 
 - `id`：稳定目录项 ID，建议 `sec-001`、`sec-001-001`。
 - `title`：目录标题，可参考历史商务标目录名称。
-- `level`：顶层为 `1`，子项为 `2`。
+- `level`：顶层为 `1`，子项为 `2`，孙项可为 `3`；更深层级仅在历史目录确有独立目录层级且不属于素材库组装项时保留。
 - `required_status`：只能是“必要”“可选”“待确认”，表示该目录项在当前目录中的提交状态。
   - “必要”：当前招标文件明确要求提交，或历史目录项已被当前招标文件明确/宽泛要求证明应纳入。
   - “可选”：仅在特定条件下提交，例如联合体、代理商、备选方案等情形。
@@ -276,15 +323,22 @@ python scripts/check_source_text.py outline.json tender_map_inputs.json
 输出前逐项自检：
 
 1. 是否先学习历史商务标目录？
-2. 是否为每个历史目录项尝试匹配当前招标文件 `source_text`？
-3. 是否避免把招标文件不稳定目录块作为主目录来源？
-4. 顶层 `sections` 是否保持历史目录结构？
-5. 当前招标文件特殊条款、约定、必须承诺、必须提交材料是否已检查？
-6. 废标、资格审查、符合性审查、商务评分线索是否都已检查？
-7. 新增 children 是否可单独编排、可单独审查？
-8. 规则性条款是否避免被直接拆成目录项？
-9. `source_text` 是否优先来自当前招标文件？
-10. 使用历史投标文件 `source_text` 的项是否已说明原因？
-11. `required_status` 是否只使用“必要”“可选”“待确认”？
-12. 是否已通过 `scripts/validate_outline.py`？
-13. 如果已有 `tender_map_inputs.json`，是否已用 `scripts/check_source_text.py` 检查当前招标文件来源的 `source_text` 可追溯？
+2. 是否保留了历史商务标的 children 和 grandchildren，避免只学习顶层？
+3. 是否先将历史目录候选纳入内部草案，再判断是否有强证据删除、延后或合并？
+4. 删除、延后或合并每个历史子层级是否有强证据？
+5. 是否避免因 `source_text` 匹配失败、只有宽泛条款覆盖、同类要求较多、标题可概括或目录过长而删除/合并历史子项？
+6. 对“其他说明/其他材料/其他承诺/资格信用符合性说明”等泛父章节，是否保留可单独编排、可单独审查的历史 children？
+7. 历史中已独立响应的资格、信用、否决、合规类承诺/声明/说明，是否没有因为其对应规则性条款而被删除或合并？
+8. 无法判断的历史子层级是否按历史经验项保留？
+9. 是否为每个历史目录项尝试匹配当前招标文件 `source_text`？
+10. 是否避免把招标文件不稳定目录块作为主目录来源？
+11. 顶层 `sections` 是否保持历史目录结构？
+12. 当前招标文件特殊条款、约定、必须承诺、必须提交材料是否已检查？
+13. 废标、资格审查、符合性审查、商务评分线索是否都已检查？
+14. 新增 children 是否可单独编排、可单独审查？
+15. 规则性条款是否避免被直接拆成目录项？
+16. `source_text` 是否优先来自当前招标文件？
+17. 使用历史投标文件 `source_text` 的项是否已说明原因？
+18. `required_status` 是否只使用“必要”“可选”“待确认”？
+19. 是否已通过 `scripts/validate_outline.py`？
+20. 如果已有 `tender_map_inputs.json`，是否已用 `scripts/check_source_text.py` 检查当前招标文件来源的 `source_text` 可追溯？
