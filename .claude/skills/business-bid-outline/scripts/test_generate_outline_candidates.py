@@ -24,12 +24,13 @@ class GenerateOutlineCandidatesTest(unittest.TestCase):
             "document_name": "历史商务标.docx",
             "outline_source": {"source_text": "历史目录", "source_type": "history_bid_toc", "confidence": "high"},
             "outline_candidates": [
-                {"title_hint": "三、投标函、法定代表人身份证明、授权委托书", "level": 1, "source_text": "附件1 投标函 89"},
-                {"title_hint": "投标函", "level": 2, "source_text": "附件1 投标函 89"},
-                {"title_hint": "法定代表人身份证明", "level": 2, "source_text": "附件1 投标函 89"},
-                {"title_hint": "九、投标人证明其是合格投标人并有资格履行合同的证明文件", "level": 1, "source_text": "附件7 资格证明文件"},
-                {"title_hint": "商务部分摘要表", "level": 2, "source_text": "商务部分摘要表 104"},
-                {"title_hint": "企业组织机构图、企业规模、服务能力简介", "level": 3, "source_text": "商务部分摘要表 104"},
+                {"title_hint": "商务评分索引表", "number": None, "level": 1, "source_text": "商务评分索引表"},
+                {"title_hint": "投标函、法定代表人身份证明、授权委托书", "number": "一、", "level": 1, "source_text": "附件1 投标函 89"},
+                {"title_hint": "投标函", "number": "1.1", "level": 2, "source_text": "附件1 投标函 89"},
+                {"title_hint": "法定代表人身份证明", "number": "1.2", "level": 2, "source_text": "附件1 投标函 89"},
+                {"title_hint": "投标人证明其是合格投标人并有资格履行合同的证明文件", "number": "二、", "level": 1, "source_text": "附件7 资格证明文件"},
+                {"title_hint": "商务部分摘要表", "number": "2.1", "level": 2, "source_text": "商务部分摘要表 104"},
+                {"title_hint": "企业组织机构图、企业规模、服务能力简介", "number": "2.1.1", "level": 3, "source_text": "商务部分摘要表 104"},
             ],
         }
 
@@ -91,9 +92,13 @@ class GenerateOutlineCandidatesTest(unittest.TestCase):
                     walk(item.get("children", []))
             walk(outline["sections"])
 
-            self.assertEqual(by_id["sec-001-001"]["source_text"], "1A 投标函")
-            self.assertEqual(by_id["sec-002-001-001"]["source_text"], "后附企业组织机构图、企业规模、服务能力简介等")
-            self.assertNotEqual(by_id["sec-001-001"]["source_text"], "附件1 投标函 89")
+            self.assertIsNone(by_id["sec-001"]["number"])
+            self.assertEqual(by_id["sec-002"]["number"], "一、")
+            self.assertEqual(by_id["sec-002-001"]["number"], "1.1")
+            self.assertEqual(by_id["sec-003-001-001"]["number"], "2.1.1")
+            self.assertEqual(by_id["sec-002-001"]["source_text"], "1A 投标函")
+            self.assertEqual(by_id["sec-003-001-001"]["source_text"], "后附企业组织机构图、企业规模、服务能力简介等")
+            self.assertNotEqual(by_id["sec-002-001"]["source_text"], "附件1 投标函 89")
             self.assertFalse(any(item["source_text"].endswith(" 89") for item in by_id.values()))
 
     def test_choose_candidate_prefers_format_heading_and_short_table_cell(self):
