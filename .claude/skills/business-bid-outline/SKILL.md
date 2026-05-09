@@ -21,9 +21,6 @@ description: 当用户要求生成商务标目录、商务标大纲、商务响�
 
 V1 只做目录结构判断，最终只输出一个 `outline.json`。
 
-**执行前准备：**
-用户需在执行本 skill 前编辑 `user_confirmed_inputs.json`，填入响应标段、投标人类型等关键上下文。AI 将直接读取，不再逐一询问；若某信息无法由招标文件替用户决定且 JSON 中未填，写入 `review_items`。
-
 禁止：
 
 - 生成商务标正文
@@ -39,7 +36,7 @@ V1 只做目录结构判断，最终只输出一个 `outline.json`。
 - 历史 child / grandchild 默认应保留；只有存在强证据表明该项不适合目录阶段保留时，才允许删除、延后或合并。
 - 不得仅因为当前招标文件没有逐字对应 `source_text`、只有宽泛条款覆盖、多个历史子项同属一类要求、标题可被概括表达或为了让目录更短更整齐，就删除或合并历史 section、child 或 grandchild。
 - 当前招标文件 `source_text` 匹配失败，只影响 `source_text` 的选择和 `required_status` 判断，不构成删除历史子项的理由。
-- 只有能明确判断为“素材库组装项”、明显不适用于当前项目且有当前招标文件或用户确认依据、或已被另一个更明确历史目录项完整覆盖的历史子层级，才在目录生成阶段延后、不保留或合并。
+- 只有能明确判断为“素材库组装项”、明显不适用于当前项目且有当前招标文件明确依据、或已被另一个更明确历史目录项完整覆盖的历史子层级，才在目录生成阶段延后、不保留或合并。
 - 无法判断某个历史子层级是否应删除时，优先按“历史经验项”保留，并用 `required_status`、`context` 或 `review_items` 标明当前招标文件证据不足。
 - 当前招标文件是当前项目要求的权威来源，也是 `source_text` 的优先来源。
 - 从历史目录学习来的每个 section、child 或 grandchild，都必须尽量回到当前招标文件中寻找对应原文。
@@ -49,12 +46,19 @@ V1 只做目录结构判断，最终只输出一个 `outline.json`。
 - `review_items` 只记录完成目录判断后仍影响目录项存在、归属或状态的人工审核问题。
 - `required_status` 只表达该目录项在当前目录中的提交状态，只能为“必要”“可选”“待确认”。
 
-### source_text 匹配优先级
+### source_text 结构化查找顺序
 
-1. 当前招标文件明确对应原文：投标文件格式、提交要求、材料名称、表格名称、承诺要求、资格/符合性/评分/前附表/特殊条款等。
-2. 当前招标文件宽泛对应原文：能证明目录项必要性但与历史目录名称不完全一致；此时将 `required_status` 设为“待确认”或写入 `review_items`。
-3. 历史投标文件原文 fallback：历史经验项在当前招标文件找不到明确原文时可使用，并在 `outline_source`、`context` 或 `review_items` 中说明“历史经验保留项”，避免误认为来自当前招标文件。
-4. 素材库组装项：不进入目录输出，不为了提供 `source_text` 而固定为 section 或 child；可在 `context` 中说明目录阶段不展开。
+`source_text` 不做孤立标题全文搜索。历史商务标目录负责决定“保留什么”；当前招标文件负责尽量提供“依据原文在哪里”。同名标题找不到，不代表当前招标文件没有依据，也不能作为删除、合并历史目录项的理由。
+
+对每个目录项按以下顺序查找：
+
+1. 格式章节优先：如果当前招标文件存在“投标文件格式、响应文件格式、商务文件格式、格式及附件”等类似章节，优先把它当成结构化依据来源。这类章节常以正文方式先列父项，再逐个展开父项；展开处可能包含编号条目、表格字段、填表说明、普通文本列举或附件说明。
+2. 父项上下文优先：先为父 section 定位格式父项或格式块；child / grandchild 必须先在父项范围内找 `source_text`。父项范围找不到时，才允许离开父范围补查。
+3. 证据粒度优先：顶层 section 优先使用格式父标题；child 优先使用父范围内的编号条目、表格单元格、填写说明、后附/应附/提供/提交/复印件/证明材料等短原文。能用一句话或一个单元格，不用整行、整段或 zone 文本。
+4. 高价值区域补查：格式章节或父项上下文找不到时，再查投标文件组成/提交要求、资格要求/资格审查、符合性审查/否决条款/实质性响应、商务评分/商务评审、其他必须承诺/提交/说明区域。
+5. 宽泛条款兜底：如果只有“投标人认为应当提交的其他材料”“投标文件完整性”等宽泛依据，可以使用当前招标文件逐字原文作为弱 `source_text`，并将 `required_status` 设为“待确认”或说明依据较宽泛。
+6. 历史商务标 fallback：只有以上都找不到时，才使用历史投标文件原文，并在 `outline_source`、`context` 或 `review_items` 中说明“历史经验保留项”。
+7. 素材库组装项：不进入目录输出，不为了提供 `source_text` 而固定为 section 或 child；可在 `context` 中说明目录阶段不展开。
 
 ## 执行步骤
 
@@ -147,17 +151,36 @@ python scripts/prepare_tender_map_inputs.py <招标文件.docx> --expert-checkli
 
 对每个从历史目录学习来的 section、child 或 grandchild：
 
-1. 先在当前招标文件 `tender_map` 中查找对应原文。
-2. 优先匹配投标文件格式章节、投标文件组成、资格/符合性审查、评分标准、前附表、特殊条款、表格标题、材料提交要求等位置。
-3. 若找到明确对应原文，使用当前招标文件原文作为 `source_text`。
-4. 若只能找到宽泛对应原文，使用该宽泛原文作为 `source_text`，并将该项 `required_status` 设为“待确认”或在 `review_items` 中提示人工确认。
-5. 若完全找不到可靠对应原文，不删除该历史目录项；后续按“历史子层级保留规则”决定保留、延后或不输出。
+1. 先按“格式章节优先、父项上下文优先、证据粒度优先、高价值区域补查、宽泛条款兜底、历史 fallback 最后”的顺序查找 `source_text`。
+2. 匹配时先去除历史目录编号，弱化附件号、表号、格式编号差异，提取核心标题词；不要要求历史标题与当前招标文件逐字同名。
+3. 父项找到格式父项或格式块后，child 和 grandchild 优先在该范围内匹配编号条目、表格字段、填表说明、普通文本列举、附件说明或材料提交语句。
+4. 选择候选时先看结构身份，再看文本相似度：顶层 section 优先格式父标题；child 优先父范围内短原文；评分、资格、符合性、宽泛条款只能作为补充，不应压过格式章节中的父项/子项依据。
+5. 若找到明确当前招标文件原文，使用当前招标文件逐字原文作为 `source_text`。
+6. 若只能找到宽泛对应原文，使用该宽泛原文作为 `source_text`，并将该项 `required_status` 设为“待确认”或在 `review_items` 中提示人工确认。
+7. 若完全找不到可靠当前招标文件原文，不删除该历史目录项；后续按“历史子层级保留规则”决定保留、延后或不输出。
 
 复核上下文时优先使用：
 
 ```bash
 python scripts/get_context_block.py tender_map_inputs.json --text <关键词或原文> --format md
 ```
+
+对未匹配或疑似历史 fallback 的项，先使用候选召回脚本二次补查：
+
+```bash
+python scripts/resolve_source_text_candidates.py tender_map_inputs.json outline.json --output source_text_candidates.json
+```
+
+该脚本只召回候选，不自动替换 `source_text`，不替 AI 做最终判断。生成最终 `outline.json` 时必须消费 `source_text_candidates.json`：
+
+- 对 unmatched、疑似历史 fallback、child 使用父项标题作为 `source_text`、多个 sibling 复用同一 `source_text` 的项，必须先查看该项候选。
+- child / grandchild 有父项时，优先选择 `scope` 为 `parent_context` 的候选；其次是 `format_area`，再其次是 `high_value_area`、`broad_clause`，最后才允许历史 fallback。
+- 父项为摘要表、信息表、资格表、格式表、材料清单、承诺书、声明函等表单/格式类章节时，child 不得直接使用父项标题；优先使用父项范围内的编号条目、表格单元格、填写说明、后附/应附/须附/提供/提交/复印件/证明材料等短原文。若同一位置同时有表格整行和单元格/短句，优先单元格/短句。
+- zone 只能用于定位上下文，不能直接作为最终 `source_text`。目录页、目次页、末尾页码型文本也不能作为最终 `source_text`。
+- 候选必须逐字复制当前招标文件原文。候选能弱支撑但不够精确时，保留历史目录项并将 `required_status` 设为“待确认”或写入 `review_items`，不要为了消除 unmatched 而强行把父项标题塞给 child。
+- 如果存在 `parent_context` 候选却仍使用历史 fallback，必须在 `review_items` 中说明为什么父项上下文不能支撑该项。
+
+选择候选时仍需根据上下文判断它是否能支撑该目录项；如果候选只是宽泛依据，按“待确认”处理。
 
 `source_text` 必须逐字复制来源原文，不得重组、改写、补全或调整编号位置。`title` 可以参考历史目录名称并做必要清理，但不得把无法证明的内容写成当前招标文件原文。
 
@@ -175,7 +198,7 @@ python scripts/get_context_block.py tender_map_inputs.json --text <关键词或�
 历史商务标中的 child / grandchild 默认应保留。只有以下强证据存在时，才允许不继承：
 
 - 该项明显是后续正文组装时由素材库展开的细碎内容，例如具体项目清单、具体证书扫描件、具体协议附件、图片说明、表格行项目、设备/工厂/人员/业绩明细、逐页附件等。
-- 该项明显不适用于当前项目，且有当前招标文件或用户确认作为依据。
+- 该项明显不适用于当前项目，且有当前招标文件明确依据。
 - 该项已被历史目录中另一个更明确的目录项完整覆盖。
 
 不得因为以下原因删除或合并历史子项：
@@ -233,7 +256,7 @@ python scripts/extract_format_children_candidates.py tender_map_inputs.json \
 - 只是说明文字或填写提示。
 - 已被更上层或更明确的目录项覆盖。
 
-处理多标段、多报价表、多货物规格表等情况时，可依据 `tender_map`、`children_candidates.json` 和 `user_confirmed_inputs.json` 生成或标记相应 children；不能确定时，相关 section 的 `required_status` 标为“待确认”，并视情况写入 `review_items`。
+处理多标段、多报价表、多货物规格表等情况时，可依据 `tender_map` 和 `children_candidates.json` 生成或标记相应 children；不能确定时，相关 section 的 `required_status` 标为“待确认”，并视情况写入 `review_items`。
 
 ### 7. 输出 outline.json
 
@@ -308,6 +331,22 @@ python scripts/check_source_text.py outline.json tender_map_inputs.json
 ```
 
 若有少量 `source_text` 合理来自历史投标文件 fallback，`check_source_text.py` 可能报告 unmatched；必须在 `context` 或 `review_items` 中确认这些项已说明历史来源和原因。
+
+还必须使用候选召回脚本复核最终目录质量：
+
+```bash
+python scripts/resolve_source_text_candidates.py tender_map_inputs.json outline.json --output source_text_candidates.json
+```
+
+检查 `source_text_candidates.json.quality_issues`，并人工复核以下情况：
+
+- child 的 `source_text` 与父项 `source_text` 完全相同。
+- 多个 sibling child 复用同一个父项标题、附件标题、表格标题或格式标题。
+- `source_text` 疑似来自目录页/目次页。
+- `source_text` 过长，疑似使用了整段 zone 文本。
+- child / grandchild 有 `parent_context` 候选，但最终仍使用历史 fallback。
+
+发现上述问题时，不得通过删除历史目录项来让检查通过；应优先改用当前招标文件中的父项上下文、表格行/单元格、填写说明或后附材料说明作为 `source_text`。仍无法确定时，保留目录项并标为“待确认”。
 
 不要输出：
 

@@ -1,0 +1,13 @@
+.worktrees/
+__pycache__/
+*.py[cod]
+.vs/
+Search/
+*.tmp
+~$*
+tender_map_inputs.json
+history_bid_outline_inputs.json
+source_text_candidates*.json
+outline.json
+check_source_text*.txt
+analysis_summary.txt
