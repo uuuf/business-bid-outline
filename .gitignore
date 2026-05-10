@@ -11,3 +11,9 @@ source_text_candidates*.json
 outline.json
 check_source_text*.txt
 analysis_summary.txt
+business_format_clean_report.md
+*.fields.tmp.docx
+*.bookmark.tmp.docx
+*.toc.tmp.docx
+*.style-id.tmp.docx
+.claude/skills/bid-business-format-cleaner/examples/out/
